@@ -4,6 +4,7 @@
  */
 
 #include "types.h"
+#include "../ring_buffer/kring_buffer.h"
 
 /*
  * wave_close:
@@ -46,13 +47,15 @@ void wave_open(int raw, int mono_from_stereo)
 
   /* open input file */
   if((config.wave.file = fopen(config.infile,"rb")) == NULL)
-    error("Unable to open file");
+    printf("Unable to open file\r\n");
 
   if(raw)
   {
+    #if 0
       fseek(config.wave.file, 0, SEEK_END); /* find length of file */
       header.length = ftell(config.wave.file);
       fseek(config.wave.file, 0, SEEK_SET);
+     #endif
       header.channels = (mono_from_stereo) ? 1 : 2;
       header.samp_rate = config.wave.samplerate; /* 44100 if not set by user */
       header.bit_samp = 16;     /* assumed */
@@ -118,3 +121,81 @@ unsigned long int *wave_get(void)
   }
 }
 
+/*
+ * wave_get_bysunzhguy:
+ * ---------
+ * Reads samples from the file in longs. A long can
+ * hold one stereo or two mono samples.
+ * Returns the address of the start of the next frame or NULL if there are no
+ * more. The last frame will be padded with zero's.
+ */
+static time_t rcd_time = 0; /*时间 临时变量=time(NULL)*/
+#define  ENCODER_ON   1
+#define  ENCODER_OFF  0
+int encode_status = ENCODER_ON;
+extern struct  kring_buffer * ring_buf ;
+
+static void msleep(int ms)
+{
+
+	usleep(1000*ms);
+
+}
+unsigned long int *wave_get_bysunzhguy(void)
+{
+  int n,p;
+  static unsigned long buff[samp_per_frame];
+  static unsigned short i = 1;
+  time_t tmp_t = 0;
+   if(0 == i%28)    /*28 = 1S*/
+    {
+        tmp_t = time(NULL);
+        if((tmp_t - rcd_time) > 3600)
+        {
+            encode_status = ENCODER_OFF;
+            i = 1;
+            printf("record times reach 30 mintues ,stop record\n");    //hyh
+        }
+    
+    }
+    
+    i++;
+    if(encode_status == ENCODER_OFF)
+    {
+      i = 1;
+      return 0;
+    }
+
+  n = config.mpeg.samples_per_frame >> (2 - config.wave.channels);
+
+  p = kring_buffer_get(((u8*)(buff)),ring_buf, sizeof(unsigned long)*n);
+
+	while(p <= 0)
+	{
+		msleep(1);
+
+		if(encode_status == ENCODER_ON)
+		{
+			p = kring_buffer_get(((u8*)(buff)),ring_buf, sizeof(unsigned long)*n);
+
+		}
+		else
+		{
+			printf("Layer3 go out,,read none \n");
+		
+			return 0;
+
+		}
+	}
+    p = p/sizeof(unsigned long);
+
+  //p = fread(buff,sizeof(unsigned long),(short)n,config.wave.file);
+  if(!p)
+    return 0;
+  else
+  {
+    for(; p<n; p++)
+      buff[p]=0;
+    return buff;
+  }
+}

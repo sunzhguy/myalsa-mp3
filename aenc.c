@@ -4,7 +4,7 @@
  * @Author: sunzhguy
  * @Date: 2020-05-29 12:41:49
  * @LastEditor: sunzhguy
- * @LastEditTime: 2020-06-16 17:04:23
+ * @LastEditTime: 2020-06-16 17:56:07
  */ 
 /*
  进行音频采集，采集pcm数据并直接保存pcm数据
@@ -22,9 +22,10 @@ $ ./a.out hw:0 123.pcm
 #include <alsa/asoundlib.h>
 #include <signal.h>
 #include "mp3_encoder/types.h"
+#include <pthread.h>
 
-config_t config;
-int cutoff;
+
+
 #define AudioFormat SND_PCM_FORMAT_S16_LE  //指定音频的格式,其他常用格式：SND_PCM_FORMAT_U24_LE、SND_PCM_FORMAT_U32_LE
 #define AUDIO_CHANNEL_SET   2 			  //1单声道   2立体声
 #define AUDIO_RATE_SET 44100  //音频采样率,常用的采样频率: 44100Hz 、16000HZ、8000HZ、48000HZ、22050HZ
@@ -58,9 +59,144 @@ const char* print_pcm_state(snd_pcm_state_t state)
 return "UNKNOWN STATE";
 }
 
+/************************************************************/
+struct  kring_buffer * ring_buf =NULL;
+config_t config;
+int cutoff;
+
+
+ static void *thread_mp3_encoder(void *arg)
+{
+   do{
+
+	   printf("mp3_encoder..................\r\n");
+	   sleep(1);
+
+   }while(!run_flag);
+}
+
+/*
+ * find_samplerate_index:
+ * ----------------------
+ */
+static int find_samplerate_index(long freq)
+{
+  static long sr[4][3] =  {{11025, 12000,  8000},   /* mpeg 2.5 */
+                          {    0,     0,     0},   /* reserved */
+                          {22050, 24000, 16000},   /* mpeg 2 */
+                          {44100, 48000, 32000}};  /* mpeg 1 */
+  int i, j;
+
+  for(j=0; j<4; j++)
+    for(i=0; i<3; i++)
+      if((freq == sr[j][i]) && (j != 1))
+      {
+        config.mpeg.type = j;
+        return i;
+      }
+
+  error("Invalid samplerate");
+  return 0;
+}
+
+
+/*
+ * find_bitrate_index:
+ * -------------------
+ */
+static int find_bitrate_index(int bitr)
+{
+  static long br[2][15] =
+    {{0, 8,16,24,32,40,48,56, 64, 80, 96,112,128,144,160},   /* mpeg 2/2.5 */
+     {0,32,40,48,56,64,80,96,112,128,160,192,224,256,320}};  /* mpeg 1 */
+  int i;
+
+  for(i=1; i<15; i++)
+    if(bitr==br[config.mpeg.type & 1][i]) return i;
+
+  error("Invalid bitrate");
+  return 0;
+}
+
+int set_cutoff(void)
+{
+  static int cutoff_tab[3][2][15] =
+  {
+    { /* 44.1k, 22.05k, 11.025k */
+      {100,104,131,157,183,209,261,313,365,418,418,418,418,418,418}, /* stereo */
+      {183,209,261,313,365,418,418,418,418,418,418,418,418,418,418}  /* mono */
+    },
+    { /* 48k, 24k, 12k */
+      {100,104,131,157,183,209,261,313,384,384,384,384,384,384,384}, /* stereo */
+      {183,209,261,313,365,384,384,384,384,384,384,384,384,384,384}  /* mono */
+    },
+    { /* 32k, 16k, 8k */
+      {100,104,131,157,183,209,261,313,365,418,522,576,576,576,576}, /* stereo */
+      {183,209,261,313,365,418,522,576,576,576,576,576,576,576,576}  /* mono */
+    }
+  };
+
+  return cutoff_tab[config.mpeg.samplerate_index]
+                   [config.mpeg.mode == MODE_MONO]
+                   [config.mpeg.bitrate_index];
+}
+
+/*
+ * check_config:
+ * -------------
+ */
+static void check_config()
+{
+  static char *mode_names[4]    = { "stereo", "j-stereo", "dual-ch", "mono" };
+  static char *layer_names[4]   = { "", "III", "II", "I" };
+  static char *version_names[4] = { "MPEG 2.5", "", "MPEG 2", "MPEG 1" };
+  static char *psy_names[3]     = { "none", "MUSICAM", "Shine" };
+  static char *demp_names[4]    = { "none", "50/15us", "", "CITT" };
+
+  config.mpeg.samplerate_index = find_samplerate_index(config.wave.samplerate);
+  config.mpeg.bitrate_index    = find_bitrate_index(config.mpeg.bitr);
+  cutoff = set_cutoff();
+
+  printf("%s layer %s, %s  Psychoacoustic Model: %s\n",
+           version_names[config.mpeg.type],
+           layer_names[config.mpeg.layr],
+           mode_names[config.mpeg.mode],
+           psy_names[config.mpeg.psyc] );
+  printf("Bitrate=%d kbps  ",config.mpeg.bitr );
+  printf("De-emphasis: %s   %s %s\n",
+           demp_names[config.mpeg.emph],
+           (config.mpeg.original) ? "Original" : "",
+           (config.mpeg.copyright) ? "(C)" : "" );
+}
+
+/*
+ * set_defaults:
+ * -------------
+ */
+static void set_defaults()
+{
+  config.mpeg.type = MPEG1;
+  config.mpeg.layr = LAYER_3;
+  config.mpeg.mode = MODE_DUAL_CHANNEL;
+  config.mpeg.bitr = 128;
+  config.mpeg.psyc = 0;
+  config.mpeg.emph = 0;
+  config.mpeg.crc  = 0;
+  config.mpeg.ext  = 0;
+  config.mpeg.mode_ext  = 0;
+  config.mpeg.copyright = 0;
+  config.mpeg.original  = 1;
+  config.mpeg.channels = 2;
+  config.mpeg.granules = 2;
+  cutoff = 418; /* 16KHz @ 44.1Ksps */
+  config.wave.samplerate = 44100;
+}
+
+/***************************************************************************/
 
 int main(int argc, char *argv[])
 {
+	char out_mp3file [200]={0x00};
 	int i;
 	int err;
 	char *buffer,*buffer_left;
@@ -69,6 +205,7 @@ int main(int argc, char *argv[])
 	unsigned int rate = AUDIO_RATE_SET;
 	snd_pcm_t *capture_handle;// 一个指向PCM设备的句柄
 	snd_pcm_hw_params_t *hw_params; //此结构包含有关硬件的信息，可用于指定PCM流的配置
+	pthread_t thread_mp3;
 	
 	/*注册信号捕获退出接口*/
 	signal(2,exit_sighandler);
@@ -258,10 +395,16 @@ int main(int argc, char *argv[])
 	printf("++++start...capture Audio..frame_byte:%d,frame_size:%d,++++.\n",frame_byte,frame_size);
 
 
+    ring_buf = kring_bufer_alloc_init(1024*1024);
+	printf("\r\n**************set mp3 encoder*******************\r\n");
+    set_defaults();
+	check_config();
+	wave_open(1,2);
 
-
-
-
+	sprintf(out_mp3file,"%s.mp3",argv[1]);
+	config.outfile = out_mp3file;
+	pthread_create(&thread_mp3,NULL,thread_mp3_encoder,NULL);
+	printf("*************************************************\r\n");
 	while(1) 
 	{
         #if 1
@@ -329,5 +472,8 @@ int main(int argc, char *argv[])
  
 	/*关闭文件流*/
 	fclose(pcm_data_file);
+
+	pthread_join(&thread_mp3,NULL);
+	kring_bufer_alloc_exit(ring_buf);
 	return 0;
 }

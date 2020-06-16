@@ -16,6 +16,8 @@ SOURCE += mp3_encoder/loop.c
 SOURCE += mp3_encoder/utils.c
 SOURCE += mp3_encoder/wave.c
 
+SOURCE += ring_buffer/kring_buffer.c
+
 LIB_PATH= /home/cftc/sunzhguy/NXP_IM6ULL/rootfs/tools_porting/libasound/alsa-lib/lib
 LIB_FILES=-lasound
 

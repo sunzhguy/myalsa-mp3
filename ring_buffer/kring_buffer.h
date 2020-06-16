@@ -4,12 +4,14 @@
  * @Author: sunzhguy
  * @Date: 2020-06-05 15:34:51
  * @LastEditor: sunzhguy
- * @LastEditTime: 2020-06-08 08:39:39
+ * @LastEditTime: 2020-06-16 18:16:58
  */ 
 
 #ifndef  KRING_FIFO_BUFFER_H
 #define  KRING_FIFO_BUFFER_H
 
+typedef  unsigned  int uint32_t;
+typedef  unsigned  char u8;
 struct  kring_buffer
 {
      void *   fbuffer;//fifo缓冲区

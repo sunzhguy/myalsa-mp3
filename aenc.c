@@ -4,7 +4,7 @@
  * @Author: sunzhguy
  * @Date: 2020-05-29 12:41:49
  * @LastEditor: sunzhguy
- * @LastEditTime: 2020-06-16 16:03:11
+ * @LastEditTime: 2020-06-16 17:04:23
  */ 
 /*
  进行音频采集，采集pcm数据并直接保存pcm数据
@@ -21,7 +21,10 @@ $ ./a.out hw:0 123.pcm
 #include <stdlib.h>
 #include <alsa/asoundlib.h>
 #include <signal.h>
- 
+#include "mp3_encoder/types.h"
+
+config_t config;
+int cutoff;
 #define AudioFormat SND_PCM_FORMAT_S16_LE  //指定音频的格式,其他常用格式：SND_PCM_FORMAT_U24_LE、SND_PCM_FORMAT_U32_LE
 #define AUDIO_CHANNEL_SET   2 			  //1单声道   2立体声
 #define AUDIO_RATE_SET 44100  //音频采样率,常用的采样频率: 44100Hz 、16000HZ、8000HZ、48000HZ、22050HZ

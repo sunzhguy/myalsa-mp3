@@ -105,7 +105,7 @@ void open_bit_stream(char *filename)
   static unsigned char buff[BUFFER_SIZE];
 
   if ((bs.f = fopen(filename, "wb")) == NULL)
-    error("Unable to open output file");
+    printf("Unable to open output file");
   bs.b = buff;
   bs.i = 0;
 

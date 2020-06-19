@@ -141,6 +141,18 @@ static void msleep(int ms)
 	usleep(1000*ms);
 
 }
+
+void set_mp3encoder_off(void)
+{
+
+  encode_status = ENCODER_OFF;
+}
+
+extern int run_flag ;
+void init_time(void)
+{
+  	rcd_time = time(NULL);    /*record init time*/
+}
 unsigned long int *wave_get_bysunzhguy(void)
 {
   int n,p;
@@ -158,7 +170,9 @@ unsigned long int *wave_get_bysunzhguy(void)
         }
     
     }
-    
+    if(run_flag)
+    encode_status = ENCODER_OFF;
+
     i++;
     if(encode_status == ENCODER_OFF)
     {
@@ -167,17 +181,37 @@ unsigned long int *wave_get_bysunzhguy(void)
     }
 
   n = config.mpeg.samples_per_frame >> (2 - config.wave.channels);
-
-  p = kring_buffer_get(((u8*)(buff)),ring_buf, sizeof(unsigned long)*n);
+  
+ if(kring_buffer_len(ring_buf) >= sizeof(unsigned long)*n)
+ {
+   p = kring_buffer_get(ring_buf, ((u8*)(buff)),sizeof(unsigned long)*n);
+ }else
+ {
+   printf("get_len:%ld,n==%d,%d,%d\r\n",kring_buffer_len(ring_buf),n, sizeof(unsigned long)*n,sizeof(unsigned long));
+   p = 0;
+ }
+ 
 
 	while(p <= 0)
 	{
 		msleep(1);
+    if(kring_buffer_len(ring_buf) <sizeof(unsigned long)*n)
+    {
+      	msleep(1);
+    }
 
 		if(encode_status == ENCODER_ON)
 		{
-			p = kring_buffer_get(((u8*)(buff)),ring_buf, sizeof(unsigned long)*n);
-
+      if(kring_buffer_len(ring_buf) >=sizeof(unsigned long)*n)
+      {
+        p = kring_buffer_get(ring_buf, ((u8*)(buff)),sizeof(unsigned long)*n);
+        printf("+++++++++p====%d\r\n",p);
+      }else
+      {
+        p =0;
+      }
+      
+		
 		}
 		else
 		{

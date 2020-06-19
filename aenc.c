@@ -4,7 +4,7 @@
  * @Author: sunzhguy
  * @Date: 2020-05-29 12:41:49
  * @LastEditor: sunzhguy
- * @LastEditTime: 2020-06-16 17:56:07
+ * @LastEditTime: 2020-06-19 10:23:59
  */ 
 /*
  进行音频采集，采集pcm数据并直接保存pcm数据
@@ -22,6 +22,7 @@ $ ./a.out hw:0 123.pcm
 #include <alsa/asoundlib.h>
 #include <signal.h>
 #include "mp3_encoder/types.h"
+#include "ring_buffer/kring_buffer.h"
 #include <pthread.h>
 
 
@@ -67,12 +68,15 @@ int cutoff;
 
  static void *thread_mp3_encoder(void *arg)
 {
+	usleep(500);
    do{
 
-	   printf("mp3_encoder..................\r\n");
-	   sleep(1);
+	  // printf("mp3_encoder..................\r\n");
+	   L3_compress();
 
    }while(!run_flag);
+   printf("ex....it\r\n");
+   return  NULL;
 }
 
 /*
@@ -394,12 +398,12 @@ int main(int argc, char *argv[])
 	/*开始采集音频pcm数据*/
 	printf("++++start...capture Audio..frame_byte:%d,frame_size:%d,++++.\n",frame_byte,frame_size);
 
-
+    int mono_from_stereo = 0;
     ring_buf = kring_bufer_alloc_init(1024*1024);
 	printf("\r\n**************set mp3 encoder*******************\r\n");
     set_defaults();
 	check_config();
-	wave_open(1,2);
+	wave_open(1,mono_from_stereo);
 
 	sprintf(out_mp3file,"%s.mp3",argv[1]);
 	config.outfile = out_mp3file;
@@ -431,7 +435,8 @@ int main(int argc, char *argv[])
 		if(AUDIO_CHANNEL_SET == 0x02)
 		{
 		
-		#if 0
+		if(mono_from_stereo != 0)
+		{
 			unsigned short *left_ptr = (unsigned short *)buffer_left;
 			unsigned short *all_ptr  = (unsigned short *)buffer;
 			int j =0;
@@ -445,9 +450,17 @@ int main(int argc, char *argv[])
 			  }
 		  }
 		  //printf("j===%d,i==%d,frame_size:%d frame_byte:%d\n",j,i,frame_size,frame_byte/2);
-		   fwrite(buffer_left,frame_size,frame_byte/2,pcm_left_file);
-		   #endif
-		   fwrite(buffer,frame_size,frame_byte,pcm_data_file);	
+		   //fwrite(buffer_left,frame_size,frame_byte/2,pcm_left_file);
+		   kring_buffer_put(ring_buf,left_ptr,frame_size*frame_byte/2);
+		   
+		}else
+		{
+			 kring_buffer_put(ring_buf,buffer,frame_size*frame_byte);
+		}
+		
+			
+		   //fwrite(buffer,frame_size,frame_byte,pcm_data_file);	
+		   //kring_buffer_put(ring_buf,buffer,frame_size*frame_byte);
 		}else
 		{
 		   fwrite(buffer,frame_size,frame_byte,pcm_data_file);	
@@ -473,7 +486,11 @@ int main(int argc, char *argv[])
 	/*关闭文件流*/
 	fclose(pcm_data_file);
 
-	pthread_join(&thread_mp3,NULL);
+	
+	//sleep(2);
+	pthread_join(thread_mp3,NULL);
+	printf("+++++++++111+++++\r\n");
 	kring_bufer_alloc_exit(ring_buf);
+	printf("+++++++++2222+++++\r\n");
 	return 0;
 }

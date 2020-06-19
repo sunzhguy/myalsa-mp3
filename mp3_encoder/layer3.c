@@ -91,10 +91,11 @@ void L3_compress(void)
   printf("%ld frames+++++config.wave.total_samples：%ld+++++%d\n",config.mpeg.total_frames,config.wave.total_samples, config.mpeg.samples_per_frame);
 
   frames_processed = lag = 0;
-
+ 
   open_bit_stream(config.outfile);
-
-  while((buffer[0] = buffer[1] = wave_get()) != 0)
+ printf("++++++%s\r\n",config.outfile);
+ init_time();
+  while((buffer[0] = buffer[1] = wave_get_bysunzhguy()) != 0)
   {
     frames_processed++;
     if(((frames_processed & 7)==0) || (frames_processed >= config.mpeg.total_frames))
